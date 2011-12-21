@@ -1,0 +1,356 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Module>
+    <ModulePrefs
+            title="OU open forum search"
+            author="The Open University"
+            author_email="igoogle+nospam@my.open.ac.uk"
+            description="Search open access forums at The Open University."
+            thumbnail="http://students.open.ac.uk/googletemplates/gadgets/openforumsearch/thumbnail.png" scrolling="true" height="350">
+        <Require feature="views" />
+        <Require feature="dynamic-height" />
+        <Require feature="osapi" />
+    </ModulePrefs>
+    <Content type="html" view="home,canvas,profile"><![CDATA[<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+
+<style type="text/css">
+    body,div,ul,li,h1,h2,h3,h4,h5,h6,form,textarea,p,td {
+      margin: 0;
+      padding: 0;
+    }
+    img {
+      border: 0;
+    }
+    ol,ul {
+      list-style: none;
+    }
+    h1,h2,h3,h4,h5,h6 {
+      font-size: 100%;
+      font-weight: normal;
+    }
+    body {
+      background-color: #fff;
+      font:13px arial,sans-serif;
+    }
+    table {
+      font-size: inherit;
+    }
+    img a,a img {
+      background-color: transparent;
+    }
+    table td {
+      font-size: 12px;
+      vertical-align: top;
+    }
+    .clearer {
+        clear: both;
+        height: 1em;
+    }
+    #buffer {
+        display: none;
+    }
+    #spinner {
+        display: none;
+        background: url(http://students.open.ac.uk/googletemplates/gadgets/openforumsearch/ajax-loader.gif);
+        width: 16px;
+        height: 16px;
+        text-align: center;
+        margin-left: 48%;
+    }
+    label {
+        display: block;
+    }
+    fieldset {
+        border: 1px solid black;
+        -moz-border-radius: 4px;
+        -webkit-border-radius: 4px;
+        padding: 1em;
+    }
+    #results {
+        border: 1px solid black;
+        margin-top: 1em;
+        padding: 1em;
+        display:none;
+        -moz-border-radius: 4px;
+        -webkit-border-radius: 4px;
+    }
+    #resultslabel {
+        padding-bottom: 1em;
+    }
+    #resultstext {
+        overflow: none;
+    }
+    .resulttitle {
+        padding-bottom: 2px;
+    }
+    .resultlink {
+        padding-bottom: 5px;
+        font-size: 75%;
+    }
+    .resultsnip {
+        font-size: 75%;
+    }
+    .resultsnip strong {
+        font-weight: bolder;
+    }
+    /*Platform class overrides*/
+    #resultstext .grouptitle {
+        font-weight: bold;
+    }
+    #resultstext .view-filters {
+        display: none;
+    }
+    #resultstext .view-content h3 {
+        display: none;
+    }
+    #resultstext .view-content thead, .views-field-name, .views-field-post-count, 
+    .views-field-member-count, .views-field-subscribe{
+        display:none;
+    }
+    .views-field-title, .views-field-description {
+        display: block;
+        padding-bottom: 2px;
+        width: 100%;
+        float: left;
+        clear: both;
+    }
+    .views-field-description {
+        font-size: 75%;
+    }
+    
+</style>
+
+<script type="text/javascript">
+    function resize_gadget() {
+        if (gadgets.views.getCurrentView().getName().toLowerCase() == 'canvas') {
+            // Tells gadget to resize itself
+            gadgets.window.adjustHeight();
+            return;
+        }
+        YUI().use("node", function(Y) {
+            //Check for Mobile (tricky with android as may be tablet)
+            if (Y.UA.iphone > 0 || Y.UA.ipod > 0 || (Y.UA.android > 1 && Y.UA.android < 3)) {
+                gadgets.window.adjustHeight();
+            }
+        });
+    }
+
+    function start() {
+        YUI().use('event', function (Y) {
+            //Form submission
+            var form = Y.one("#searchform");
+            form.on('submit', formsubmit);
+        });
+    }
+
+    function formsubmit(e) {
+        // Stop the event's default behavior
+        e.preventDefault();
+        // Stop the event from bubbling up the DOM tree
+        e.stopPropagation();
+        YUI().use('node', function(Y) {
+            var terms = Y.one("#terms").get('value');
+            if (terms == "") {
+                return false;
+            }
+            //Clear existing text
+            Y.one("#resultstext").set("innerHTML", "");
+            Y.one("#spinner").setStyle('display', 'block');
+            Y.one("#results").setStyle('display', 'block');
+            //Find selected dropdown
+            var select = Y.one("#options");
+            var optionvalue = select.get("options").item(select.get("selectedIndex")).get("value");
+
+            if (optionvalue == 1) {
+                var params = {
+                    'href' : 'http://openlearn.open.ac.uk/mod/forumng/search.php?id=396252&query=' + escape(terms),
+                    'format' : 'text',
+                    'sign_owner' : false,
+                    'sign_viewer' : false,
+                    'refreshInterval' : 3600,
+                };
+
+                osapi.http.get(params).execute(olcallback);
+            } else if (optionvalue == 2) {
+                //Call platform forum search - two types of forum so make batch request
+                var batch = osapi.newBatch();
+                var params = {
+                    'href' : 'http://www8.open.ac.uk/platform/views/ajax?title_oper=contains&title='+escape(terms)+'&view_name=og_user_created&view_display_id=block_1&view_args=&view_path=node%2F2336&view_base_path=og%2Fall%2Ffeed&view_dom_id=1&pager_element=0',
+                    'format' : 'json',
+                    'sign_owner' : false,
+                    'sign_viewer' : false,
+                    'refreshInterval' : 3600,
+                };
+                batch.add('subject', osapi.http.get(params));
+                var params2 = {
+                    'href' : 'http://www8.open.ac.uk/platform/views/ajax?title_oper=contains&title='+escape(terms)+'&view_name=og_intrest_only&view_display_id=block_1&view_args=&view_path=node%2F2336&view_base_path=og%2Fall%2Ffeed&view_dom_id=1&pager_element=0',
+                    'format' : 'json',
+                    'sign_owner' : false,
+                    'sign_viewer' : false,
+                    'refreshInterval' : 3600,
+                };
+                batch.add('interest', osapi.http.get(params2));
+                batch.execute(plcallback);
+            } else if (optionvalue == 3) {
+                var req = "https://www.googleapis.com/customsearch/v1?key=AIzaSyCmwSi6VpM1AxeTWyvW2DrXlsBMLu4LzYY&cx=003327562628194060219:8n8xmryipxu&q=";
+                req += escape(terms);
+                req += "&prettyPrint=false";
+                req += "&safe=high";
+                req += "&fields=" + escape("items(htmlTitle,link,displayLink,htmlSnippet)");
+                var params = {
+                    'href' : req,
+                    'format' : 'json',
+                    'sign_owner' : false,
+                    'sign_viewer' : false,
+                    'refreshInterval' : 3600,
+                };
+
+                osapi.http.get(params).execute(googlecallback);
+            }
+        });
+        return false;
+    }
+
+    function olcallback(e) {
+        
+        YUI().use('node', function(Y) {
+            var result = "";
+            if (e.content == "") {
+                result = "There was an error whilst getting search results.";
+            } else {
+                e.content = e.content.replace('<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">', '');
+                e.content = e.content.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+                Y.one("#buffer").set("innerHTML", e.content);
+                var results = Y.all("#buffer #content li");
+
+                results.each(function (item) {
+                    //var item = results[i];
+                    result += '<div class="result">';
+                    //Title
+                    result += '<div class="resulttitle">';
+                    result += item.get("childNodes").item(1).get("innerHTML");
+                    result += "</div>";
+                    //Snippet
+                    result += '<div class="resultsnip">';
+                    result += item.get("childNodes").item(2).get("innerHTML");
+                    result += "</div>";
+                    result += "</div>";
+                });
+                if (results.isEmpty()) {
+                    result = "Sorry, no results found.";
+                }
+            }
+            Y.one("#spinner").setStyle('display', 'none');
+            Y.one("#resultstext").set("innerHTML", result);
+            Y.one("#buffer").set("innerHTML", "");
+            var links = Y.all("#results a");
+            links.set('target', '_blank');
+        });
+    }
+    
+    function plcallback(e) {
+        //TODO request fail check
+        //Show both subject and interest groups
+        var results = "";
+        if (!e.subject.content || !e.interest.content) {
+            results = "There was an error whilst getting search results.";
+        } else {
+            var cur = e.subject.content;
+            results += '<div class="grouptitle">' + cur.title + "</div>";
+            results += cur.display;
+            
+            cur = e.interest.content;
+            results += '<div class="grouptitle">' + cur.title + "</div>";
+            results += cur.display;
+        }
+        YUI().use('node', function(Y) {
+            Y.one("#spinner").setStyle('display', 'none');
+            Y.one("#resultstext").set("innerHTML", results);
+            var links = Y.all("#results a");
+            links.set('target', '_blank');
+            //Platform uses relative links...
+            links.each(function (item) {
+                var url = item.get("pathname");
+                item.set("href", "http://www8.open.ac.uk/" + url);
+            });
+        });
+    }
+    
+    function googlecallback(e) {
+        var results = "";
+        if (e.content == '' || typeof(e.content.items) == 'undefined' || e.content.items.length == 0) {
+            results = "Sorry, no results found.";
+            if (typeof(e.content.error) != 'undefined' && e.content.error.message == "Daily Limit Exceeded") {
+                //Can only make a 100 searches a day - use backup
+                YUI().use('node', function(Y) {
+                    var terms = Y.one("#terms").get('value');
+                    var url = "http://www.google.com/cse?cx=003327562628194060219%3A8n8xmryipxu&q=";
+                    url += escape(terms);
+                    window.open(url, '_blank');
+                    results = '<a href="'+url+'">Show results (new window)</a>';
+                });
+            }
+        } else {
+            for (var i = 0; i < e.content.items.length; i++) {
+                var item = e.content.items[i];
+                results += '<div class="result">';
+                //Title
+                results += '<div class="resulttitle">';
+                results += '<a href="' + item.link + '">';
+                results += item.htmlTitle;
+                results += "</a>";
+                results += "</div>";
+                //Snippet
+                results += '<div class="resultsnip">';
+                results += item.htmlSnippet;
+                results += "</div>";
+                //Link
+                results += '<div class="resultlink">';
+                results += '<a href="' + item.link + '">';
+                results += item.displayLink;
+                results += "</a>";
+                results += "</div>";
+                results += "</div>";
+            }
+        }
+
+        YUI().use('node', function(Y) {
+            Y.one("#spinner").setStyle('display', 'none');
+            Y.one("#resultstext").set("innerHTML", results);
+            var links = Y.all("#results a");
+            links.set('target', '_blank');
+        });
+    }
+
+    gadgets.util.registerOnLoadHandler(start);
+ 
+</script>
+<div id="layout" role="main">
+<div id="search">
+<form id="searchform">
+<fieldset>
+<legend>Search options</legend>
+<label for="terms">Search for</label>
+<input name="terms" id="terms" type="text" maxlength="100" />
+<label for="options">Search in</label>
+<select name="options" id="options">
+  <option value="1">Open Learn forums</option>
+  <option value="2">Platform forums</option>
+  <option value="3">All Open Learn &amp; Platform</option>
+</select>
+<div id="searchbutton">
+<input name="Submit" type="submit" id="submit" value="Search" />
+</div>
+</fieldset>
+</form>
+</div>
+<div id="results">
+<div id="resultslabel">Search results:</div>
+<div id="spinner" ></div>
+<div id="resultstext"></div>
+</div>
+</div>
+<div class="clearer"></div>
+<div id="buffer"></div>
+<script src="http://yui.yahooapis.com/3.4.1/build/yui/yui-min.js"></script>
+]]></Content>
+</Module>
